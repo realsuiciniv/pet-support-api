@@ -1,0 +1,257 @@
+plugins {
+    id 'org.springframework.boot'
+    id 'io.spring.dependency-management'
+    id 'java'
+    id "build-dashboard"
+    id "com.dorongold.task-tree"
+    id "com.github.ben-manes.versions"
+    id "checkstyle"
+    id "pmd"
+    id "com.github.spotbugs"
+    id "com.github.andygoossens.gradle-modernizer-plugin"
+    id "jacoco"
+    id "info.solidsoft.pitest"
+    id "org.kordamp.gradle.jdeps"
+    id "org.owasp.dependencycheck"
+    id "application"
+    id "com.diffplug.spotless"
+}
+
+group = 'com.pet.support'
+version = '0.0.1'
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven { url 'https://repo.spring.io/milestone' }
+    maven { url 'https://repo.spring.io/snapshot' }
+}
+
+
+dependencies {
+    compileOnly "com.github.spotbugs:spotbugs-annotations:$spotbugsVersion"
+    compileOnly "com.google.code.findbugs:findbugs-annotations:$findbugsAnnotationsVersion"
+    compileOnly "org.gaul:modernizer-maven-annotations:$modernizerVersion"
+
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+//    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.flywaydb:flyway-core'
+
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+
+    runtimeOnly 'org.postgresql:postgresql'
+
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+    testCompileOnly "com.google.code.findbugs:findbugs-annotations:$findbugsAnnotationsVersion"
+
+    testImplementation "org.assertj:assertj-core:$assertJVersion"
+    testImplementation "org.mockito:mockito-inline:$mockitoVersion"
+    testImplementation "com.github.stefanbirkner:system-lambda:$systemLambdaVersion"
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
+
+    spotbugsPlugins "com.h3xstream.findsecbugs:findsecbugs-plugin:$findsecbugsPluginVersion"
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.testcontainers:testcontainers-bom:${testcontainersVersion}"
+    }
+}
+
+sourceSets {
+    integrationTest {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+
+        java {
+            srcDirs("src/test-integration/java")
+        }
+    }
+}
+
+configurations {
+    integrationTestImplementation.extendsFrom(testImplementation)
+    integrationTestRuntimeOnly.extendsFrom(testRuntimeOnly)
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    systemProperty "java.util.logging.config.file", "$projectDir/config/logging.properties"
+}
+
+tasks.register('integrationTest', Test) {
+    description = 'Runs integration tests.'
+    group = 'verification'
+
+    testClassesDirs = sourceSets.integrationTest.output.classesDirs
+    classpath = sourceSets.integrationTest.runtimeClasspath
+    shouldRunAfter test
+}
+
+// TODO: Work around GitHub issue #54
+configurations.pmd {
+    resolutionStrategy {
+        forcedModules = ["commons-io:commons-io:2.11.0"]
+    }
+}
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of("$jdkVersion"))
+    }
+}
+
+tasks.withType(JavaCompile) {
+    options.compilerArgs += ["-Werror", "-Xlint:all,-processing", "-parameters"]
+}
+
+test {
+    finalizedBy jacocoTestReport
+}
+
+checkstyle {
+    toolVersion = checkstyleVersion
+    configFile = project(":").file("config/checkstyle/google_checks.xml")
+}
+
+pmd {
+    ignoreFailures = false
+    toolVersion = pmdVersion
+
+    consoleOutput = true
+    rulesMinimumPriority = 5
+
+    ruleSets = [
+            rootProject.file("config/pmd/custom-rules.xml")
+    ]
+
+    pmdMain {
+        excludes = [
+                '**/PetSupportApiApplication.*'
+        ]
+    }
+
+}
+
+spotbugs {
+    effort = "Max"
+    reportLevel = "Low"
+    toolVersion = spotbugsVersion
+}
+
+modernizer {
+    failOnViolations = true
+    includeTestClasses = true
+    javaVersion = "$jdkVersion"
+}
+
+
+jacoco {
+    toolVersion = jacocoVersion
+}
+
+jacocoTestReport {
+    dependsOn test
+
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                    "**/PetSupportApiApplication.*"
+            ])
+        }))
+    }
+}
+
+jacocoTestCoverageVerification {
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                    "**/PetSupportApiApplication.*"
+            ])
+        }))
+    }
+
+    violationRules {
+        rule {
+            limit {
+                minimum = 1.00
+            }
+        }
+    }
+}
+
+pitest {
+    junit5PluginVersion = "$pitestJUnit5PluginVersion"
+    mutationThreshold = 100
+    pitestVersion = "$pitestToolVersion"
+    timestampedReports = false
+    verbose = true
+}
+
+//tasks.named("pitest") {
+//    dependsOn jacocoTestCoverageVerification
+//}
+
+jdepsReport {
+    multiReleaseJars = [".*": "$jdkVersion"]
+}
+
+dependencyCheck {
+    failBuildOnCVSS = 0
+    skip = true
+}
+
+spotless {
+    java {
+        removeUnusedImports()
+        googleJavaFormat()
+    }
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': "$mainClass"
+        attributes 'Add-Opens': 'java.base/java.lang java.base/java.util java.base/java.lang.reflect'
+    }
+}
+
+check {
+    dependsOn += jacocoTestCoverageVerification
+//    dependsOn += "pitest"
+    dependsOn += integrationTest
+    dependsOn += dependencyCheckAnalyze
+}
+
+tasks.named("dependencyUpdates").configure {
+    rejectVersionIf {
+        !isStable(it.candidate.version) && isStable(it.currentVersion)
+    }
+}
+
+tasks.named("jar") {
+    enabled = false
+}
+
+wrapper {
+    gradleVersion = "$gradleWrapperVersion"
+    distributionType = "ALL"
+}
+
+static def isStable(version) {
+    def stableKeyword = ["RELEASE", "FINAL", "GA"].any {
+        version.toUpperCase().contains(it)
+    }
+    def otherReleasePattern = version ==~ '^[0-9,.v-]+(-r)?$'
+
+    return stableKeyword || otherReleasePattern
+}

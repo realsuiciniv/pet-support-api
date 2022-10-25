@@ -1,0 +1,17 @@
+services:
+  database:
+    container_name: pet-support-db
+    image: postgres
+    environment:
+      POSTGRES_DB: pet-support-db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+    volumes:
+      - postgres:/data/postgres
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+volumes:
+  postgres:
+
