@@ -1,4 +1,4 @@
-FROM eclipse-temurin:18-alpine as build
+FROM eclipse-temurin:19-alpine as build
 WORKDIR /workspace/app
 COPY gradlew .
 COPY gradle gradle
@@ -9,7 +9,7 @@ COPY src src
 RUN ./gradlew build -x check --no-daemon
 RUN mkdir -p build/libs && (cd build/libs; jar -xf *.jar)
 
-FROM eclipse-temurin:18-alpine
+FROM eclipse-temurin:19-alpine
 VOLUME /tmp
 ARG DEPENDENCY=/workspace/app/build/libs
 COPY --from=build ${DEPENDENCY}/BOOT-INF/lib /app/lib
